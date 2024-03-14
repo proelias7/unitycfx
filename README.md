@@ -63,7 +63,8 @@ end
 -- chamda da função no server
 lib.minhaFuncao(source,param)
 ```
-**Funções**
+## Funções
+Todas as funções podem ser executada tanto do lado client ou server. Funções do lado serve para client e obrigatório o uso do parâmetro **source** como primeiro argumento.
 1. **Functions.getTools()**
    - Descrição: Retorna um conjunto de ferramentas auxiliares.
    - Parâmetros: Nenhum.
