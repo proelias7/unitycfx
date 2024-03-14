@@ -50,7 +50,7 @@ function lib.minhaFuncao(param)
     local source = source
 end
 
--- chamda da função no client
+-- chamada da função no client
 lib.minhaFuncao(param)
 ```
 **Comunicação Tunnel server para client**
