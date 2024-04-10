@@ -1,77 +1,156 @@
+--https://github.com/proelias7/unitycfx  proelias7 by Quantic Store
 
 local resourceName = GetCurrentResourceName()
 local SERVER = IsDuplicityVersion()
 local CLIENT = not SERVER
 
-if SERVER then
-    local prepares = {}
-    local drivedb
+local Modulos = {
+    db = {},
+}
 
-    Citizen.CreateThread(function()
-        local databases = {'oxmysql', 'ghmattimysql', 'GHMattiMySQL', 'haze_mysql', 'mysql-async'}
-        for i, c in ipairs(databases) do
-            if GetResourceState(c) == 'started' then
-                drivedb = c
-                return
-            end
-        end
-        print('unitycfx:: DRIVER DE BANCO DE DADOS INCOMPATÍVEL')
-    end)
+function table.maxn(t)
+	local max = 0
+	for k,v in pairs(t) do
+		local n = tonumber(k)
+		if n and n > max then max = n end
+	end
+	return max
+end
 
-    function prepare(Name, Query)
-        prepares[Name] = Query
-    end
+local modules = {}
+function module(rsc, path)
+	if path == nil then
+		path = rsc
+		rsc = resourceName
+	end
 
-    function query(Name, d)
-        local e = 0
-        local f = {}
-        local c = (prepares[Name] ~= nil and prepares[Name] or nil)
-        
-        if not c then 
-            print('unitycfx:: CHAMADA DE FUNÇÃO NÃO PREPARADA => '..Name)
-            return
-        end
+	local key = rsc..path
+	local module = modules[key]
+	if module then
+		return module
+	else
+		local code = LoadResourceFile(rsc, path..".lua")
+		if code then
+			local f,err = load(code, rsc.."/"..path..".lua")
+			if f then
+				local ok, res = xpcall(f, debug.traceback)
+				if ok then
+					modules[key] = res
+					return res
+				else
+					error("error loading module "..rsc.."/"..path..":"..res)
+				end
+			else
+				error("error parsing module "..rsc.."/"..path..":"..debug.traceback(err))
+			end
+		else
+			error("resource file "..rsc.."/"..path..".lua not found")
+		end
+	end
+end
 
-        if drivedb ~= 'haze_mysql' and drivedb ~= 'oxmysql' then
-            c = string.gsub(c, "?", function()
-                e = e + 1
-                f['@' .. e] = d[e]
-                return '@' .. e
-            end)
-        end
+local function wait(self)
+	local rets = Citizen.Await(self.p)
+	if not rets then
+		rets = self.r
+	end
+	return table.unpack(rets,1,table.maxn(rets))
+end
 
-        local result
-        local success
+local function areturn(self, ...)
+	self.r = {...}
+	self.p:resolve(self.r)
+end
 
-        if drivedb == 'ghmattimysql' then
-            success, result = pcall(exports.ghmattimysql.execute, c, f)
-        elseif drivedb == 'hydra' then
-            result = exports.vrp.query(c, f)
-            return result
-        elseif drivedb == 'oxmysql' then
-            local m = GetResourceMetadata('oxmysql', 'version', 0)
-            if m and not string.find(m, '1.') then
-                success, result = pcall(exports.oxmysql.query_async,"",c, d)
-            else
-                result = exports.oxmysql.execute(c, d)
-                return result
-            end
-        elseif drivedb == 'haze_mysql' then
-            success, result = pcall(exports.haze_mysql.query, c, d)
-        elseif drivedb == 'GHMattiMySQL' then
-            success, result = pcall(exports.GHMattiMySQL.QueryResultAsync, c, f)
-        elseif drivedb == 'mysql-async' then
-            local n = string.match(c, 'INSERT|REPLACE') and 'mysql_insert' or 'mysql_fetch_all'
-            success, result = pcall(exports['mysql-async'][n], c, f)
-        end
+function async(func)
+	if func then
+		Citizen.CreateThreadNow(func)
+	else
+		return setmetatable({ wait = wait, p = promise.new() }, { __call = areturn })
+	end
+end
 
-        if success then
-            return result
-        else
-            print('unitycfx:: Erro ao executar "' .. c .. '" com argumentos ' .. json.encode(d))
-            return
-        end
-    end
+function parseInt(v)
+	local n = tonumber(v)
+	if n == nil then
+		return 0
+	else
+		return math.floor(n)
+	end
+end
+
+function parseDouble(v)
+	local n = tonumber(v)
+	if n == nil then n = 0 end
+	return n
+end
+
+function parseFloat(v)
+	return parseDouble(v)
+end
+
+local sanitize_tmp = {}
+function sanitizeString(str, strchars, allow_policy)
+	local r = ""
+	local chars = sanitize_tmp[strchars]
+	if chars == nil then
+		chars = {}
+		local size = string.len(strchars)
+		for i=1,size do
+			local char = string.sub(strchars,i,i)
+			chars[char] = true
+		end
+		sanitize_tmp[strchars] = chars
+	end
+
+	size = string.len(str)
+	for i=1,size do
+		local char = string.sub(str,i,i)
+		if (allow_policy and chars[char]) or (not allow_policy and not chars[char]) then
+			r = r..char
+		end
+	end
+	return r
+end
+
+function splitString(str, sep)
+	if sep == nil then sep = "%s" end
+
+	local t={}
+	local i=1
+
+	for str in string.gmatch(str, "([^"..sep.."]+)") do
+		t[i] = str
+		i = i + 1
+	end
+
+	return t
+end
+
+function joinStrings(list, sep)
+	if sep == nil then sep = "" end
+
+	local str = ""
+	local count = 0
+	local size = #list
+	for k,v in pairs(list) do
+		count = count+1
+		str = str..v
+		if count < size then str = str..sep end
+	end
+	return str
+end
+
+function catch(what)
+	return what[1]
+end
+ 
+function try(what)
+	status, result = pcall(what[1])
+	if not status then
+		what[2](result)
+	end
+	return result
 end
 
 local Tools = {}
@@ -244,6 +323,21 @@ function Tunnel.getInterface(name,identifier)
 	return r
 end
 
+function import(module)
+    if Modulos[module] then
+        local status, resp = pcall(Modulos[module]:new())
+        if status then
+            return resp
+        else
+            print('unitycfx:: Erro ao executar Modulo:'..module..'.')
+            return false
+        end
+    else
+        print('unitycfx:: Modulo:'..module..' não existe.')
+        return false
+    end
+end
+
 Functions = Tunnel.getInterface(resourceName..":unitycfx:functions")
 Tunnel.bindInterface(resourceName..":unitycfx:functions",Functions)
 
@@ -259,7 +353,7 @@ if CLIENT then
         LocalPlayer["state"]["unitycfx:blockPlayer"] = status
     end
 
-    function Functions.createObject(dict,anim,prop,flag,hand)
+    function Functions.createObject(dict,anim,prop,flag,hand,xPos,yPos,zPos,xRot,yRot,zRot)
         local ped = PlayerPedId()
     
         RequestAnimDict(dict)
@@ -271,12 +365,16 @@ if CLIENT then
         RequestModel(GetHashKey(prop))
         while not HasModelLoaded(GetHashKey(prop)) do
             Citizen.Wait(10)
-        end
+        end           
     
         local coords = GetOffsetFromEntityInWorldCoords(ped,0.0,0.0,-5.0)
         object = CreateObject(GetHashKey(prop),coords.x,coords.y,coords.z,true,true,true)
         SetEntityCollision(object,false,false)
-        AttachEntityToEntity(object,ped,GetPedBoneIndex(ped,hand),0.0,0.0,0.0,0.0,0.0,0.0,true,true,false,true,1,true)
+        if xPos then
+            AttachEntityToEntity(object,ped,GetPedBoneIndex(ped,hand),xPos,yPos,zPos,xRot,yRot,zRot,true,true,false,true,1,true)
+        else
+            AttachEntityToEntity(object,ped,GetPedBoneIndex(ped,hand),0.0,0.0,0.0,0.0,0.0,0.0,true,true,false,true,1,true)
+        end
         SetEntityAsMissionEntity(object,true,true)
     end
     
@@ -293,17 +391,29 @@ if CLIENT then
         end
     end
     
-    function Functions.playAnim(upper,dict,name,looping)
+    function Functions.playAnim(upper,seq,looping)
         ClearPedTasks(PlayerPedId())
         local flags = 0
         if upper then flags = flags+48 end
         if looping then flags = flags+1 end
     
-        while not HasAnimDictLoaded(dict) do
-            Citizen.Wait(1)
-            RequestAnimDict(dict)
+        if seq.task then
+            Functions.stopAnim(true)
+    
+            local ped = PlayerPedId()
+            if seq.task == "PROP_HUMAN_SEAT_CHAIR_MP_PLAYER" then
+                local x,y,z = Functions.getPosition()
+                TaskStartScenarioAtPosition(ped,seq.task,x,y,z-1,GetEntityHeading(ped),0,0,false)
+            else
+                TaskStartScenarioInPlace(ped,seq.task,0,not seq.play_exit)
+            end
+        else
+            while not HasAnimDictLoaded(seq.dict) do
+                Citizen.Wait(1)
+                RequestAnimDict(seq.dict)
+            end
+            TaskPlayAnim(PlayerPedId(),seq.dict,seq.anim,2.0,2.0,-1,flags,0,0,0,0)
         end
-        TaskPlayAnim(PlayerPedId(),dict,name,2.0,2.0,-1,flags,0,0,0,0)
     end
 
     function Functions.stopAnim(upper)
@@ -510,5 +620,81 @@ if SERVER then
     function Functions.format(n)
         local left,num,right = string.match(n,'^([^%d]*%d)(%d*)(.-)$')
         return left..(num:reverse():gsub('(%d%d%d)','%1.'):reverse())..right
+    end
+
+    function Modulos.db:new()
+        local instance = setmetatable({}, { __index = self })
+
+        instance.prepares = {}
+        instance.drivedb = nil
+
+        local databases = {'oxmysql', 'ghmattimysql', 'GHMattiMySQL', 'haze_mysql', 'mysql-async'}
+        for i, c in ipairs(databases) do
+            if GetResourceState(c) == 'started' then
+                instance.drivedb = c
+            end
+        end
+
+        if not instance.drivedb then
+            print('unitycfx:: DRIVER DE BANCO DE DADOS INCOMPATÍVEL')
+            return 
+        end
+
+        instance.prepare = function(self, Name, Query)
+            self.prepares[Name] = Query
+        end
+
+        instance.query = function(self, Name, d)
+            local e = 0
+            local f = {}
+            local c = (self.prepares[Name] ~= nil and self.prepares[Name] or nil)
+            
+            if not c then 
+                print('unitycfx:: CHAMADA DE FUNÇÃO NÃO PREPARADA => '..Name)
+                return
+            end
+    
+            if self.drivedb ~= 'haze_mysql' and self.drivedb ~= 'oxmysql' then
+                c = string.gsub(c, "?", function()
+                    e = e + 1
+                    f['@' .. e] = d[e]
+                    return '@' .. e
+                end)
+            end
+    
+            local result
+            local success
+    
+            if self.drivedb == 'ghmattimysql' then
+                success, result = pcall(exports.ghmattimysql.execute, c, f)
+            elseif self.drivedb == 'hydra' then
+                result = exports.vrp.query(c, f)
+                return result
+            elseif self.drivedb == 'oxmysql' then
+                local m = GetResourceMetadata('oxmysql', 'version', 0)
+                if m and not string.find(m, '1.') then
+                    success, result = pcall(exports.oxmysql.query_async,"",c, d)
+                else
+                    result = exports.oxmysql.execute(c, d)
+                    return result
+                end
+            elseif self.drivedb == 'haze_mysql' then
+                success, result = pcall(exports.haze_mysql.query, c, d)
+            elseif self.drivedb == 'GHMattiMySQL' then
+                success, result = pcall(exports.GHMattiMySQL.QueryResultAsync, c, f)
+            elseif self.drivedb == 'mysql-async' then
+                local n = string.match(c, 'INSERT|REPLACE') and 'mysql_insert' or 'mysql_fetch_all'
+                success, result = pcall(exports['mysql-async'][n], c, f)
+            end
+    
+            if success then
+                return result
+            else
+                print('unitycfx:: Erro ao executar "' .. c .. '" com argumentos ' .. json.encode(d))
+                return
+            end
+        end
+
+        return instance
     end
 end
