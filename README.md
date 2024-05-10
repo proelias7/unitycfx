@@ -13,21 +13,19 @@ A Framework **unitycfx** é uma ferramenta standalone desenvolvida para facilita
 ## Get Started
 Para começar a utilizar a UnityCFX em seu projeto, basta declarar o arquivo unitycfx.lua no diretório compartilhado (shared) do seu manifesto do recurso (fxmanifest.lua).
 ```lua
-fx_version 'adamant' 
-game 'gta5'
-
 shared_script {
     "unitycfx.lua"
 }
 ```
-## Exemplos de Uso
-**Preparação e Execução de Consultas SQL**
+## Banco de dados
+**Usando banco de dados**
 ```sql
--- Preparar uma consulta
-prepare("buscarUsuarios", "SELECT * FROM usuarios WHERE id = @id")
+local db = import('db')
+-- Preparar query
+db:prepare("buscarUsuarios", "SELECT * FROM usuarios WHERE id = @id")
 
--- Executar a consulta preparada
-local resultado = query("buscarUsuarios", { id = 5 })
+-- Executar query
+local resultado = db:query("buscarUsuarios", { id = 5 })
 ```
 **Geração de IDs Únicos**
 ```lua
