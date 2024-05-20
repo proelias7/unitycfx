@@ -672,7 +672,7 @@ if SERVER then
                 return result
             elseif self.drivedb == 'oxmysql' then
                 local m = GetResourceMetadata('oxmysql', 'version', 0)
-                if m and not string.find(m, '1.') then
+                if m and tonumber(m:match("^(%d+)")) >= 2 then
                     success, result = pcall(exports.oxmysql.query_async,"",c, d)
                 else
                     result = exports.oxmysql.execute(c, d)
