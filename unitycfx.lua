@@ -338,6 +338,10 @@ function import(module)
     end
 end
 
+function debug(content)
+    print(json.encode(content,{indent = true}))
+end
+
 Functions = Tunnel.getInterface(resourceName..":unitycfx:functions")
 Tunnel.bindInterface(resourceName..":unitycfx:functions",Functions)
 
