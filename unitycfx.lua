@@ -4,6 +4,25 @@ local resourceName = GetCurrentResourceName()
 local SERVER = IsDuplicityVersion()
 local CLIENT = not SERVER
 
+local TriggerRemoteEvent = nil
+local RegisterLocalEvent = nil
+if SERVER then
+	TriggerRemoteEvent = TriggerClientEvent
+	RegisterLocalEvent = RegisterServerEvent
+else
+	TriggerRemoteEvent = TriggerServerEvent
+	RegisterLocalEvent = RegisterNetEvent
+end
+
+local Tunnel = {
+    delays = {}
+}
+
+local Tools = {}
+local IDGenerator = {}
+
+local modules = {}
+
 local Modulos = {
     db = {},
 }
@@ -17,7 +36,6 @@ function table.maxn(t)
 	return max
 end
 
-local modules = {}
 function module(rsc, path)
 	if path == nil then
 		path = rsc
@@ -153,9 +171,6 @@ function try(what)
 	return result
 end
 
-local Tools = {}
-local IDGenerator = {}
-
 function Tools.newIDGenerator()
 	local r = setmetatable({}, { __index = IDGenerator })
 	r:construct()
@@ -184,19 +199,6 @@ end
 function IDGenerator:free(id)
 	table.insert(self.ids,id)
 end
-
-local TriggerRemoteEvent = nil
-local RegisterLocalEvent = nil
-if SERVER then
-	TriggerRemoteEvent = TriggerClientEvent
-	RegisterLocalEvent = RegisterServerEvent
-else
-	TriggerRemoteEvent = TriggerServerEvent
-	RegisterLocalEvent = RegisterNetEvent
-end
-
-local Tunnel = {}
-Tunnel.delays = {}
 
 function Tunnel.setDestDelay(dest,delay)
 	Tunnel.delays[dest] = { delay,0 }
@@ -249,9 +251,9 @@ local function tunnel_resolve(itable,key)
 				end
 
 				if SERVER then
-					TriggerRemoteEvent(iname..":tunnel_req",dest,fname,args,identifier,rid)
+					TriggerRemoteEvent(iname..":unity_req",dest,fname,args,identifier,rid)
 				else
-					TriggerRemoteEvent(iname..":tunnel_req",fname,args,identifier,rid)
+					TriggerRemoteEvent(iname..":unity_req",fname,args,identifier,rid)
 				end
 			end)
 		else
@@ -262,9 +264,9 @@ local function tunnel_resolve(itable,key)
 			end
 
 			if SERVER then
-				TriggerRemoteEvent(iname..":tunnel_req",dest,fname,args,identifier,rid)
+				TriggerRemoteEvent(iname..":unity_req",dest,fname,args,identifier,rid)
 			else
-				TriggerRemoteEvent(iname..":tunnel_req",fname,args,identifier,rid)
+				TriggerRemoteEvent(iname..":unity_req",fname,args,identifier,rid)
 			end
 		end
 
@@ -283,8 +285,8 @@ local function tunnel_resolve(itable,key)
 end
 
 function Tunnel.bindInterface(name,interface)
-	RegisterLocalEvent(name..":tunnel_req")
-	AddEventHandler(name..":tunnel_req",function(member,args,identifier,rid)
+	RegisterLocalEvent(name..":unity_req")
+	AddEventHandler(name..":unity_req",function(member,args,identifier,rid)
 		local source = source
 
 		local f = interface[member]
@@ -296,9 +298,9 @@ function Tunnel.bindInterface(name,interface)
 
 		if rid >= 0 then
 			if SERVER then
-				TriggerRemoteEvent(name..":"..identifier..":tunnel_res",source,rid,rets)
+				TriggerRemoteEvent(name..":"..identifier..":unity_res",source,rid,rets)
 			else
-				TriggerRemoteEvent(name..":"..identifier..":tunnel_res",rid,rets)
+				TriggerRemoteEvent(name..":"..identifier..":unity_res",rid,rets)
 			end
 		end
 	end)
@@ -311,8 +313,8 @@ function Tunnel.getInterface(name,identifier)
 	local callbacks = {}
 	local r = setmetatable({},{ __index = tunnel_resolve, name = name, tunnel_ids = ids, tunnel_callbacks = callbacks, identifier = identifier })
 
-	RegisterLocalEvent(name..":"..identifier..":tunnel_res")
-	AddEventHandler(name..":"..identifier..":tunnel_res",function(rid,args)
+	RegisterLocalEvent(name..":"..identifier..":unity_res")
+	AddEventHandler(name..":"..identifier..":unity_res",function(rid,args)
 		local callback = callbacks[rid]
 		if callback then
 			ids:free(rid)
@@ -350,7 +352,6 @@ Tunnel.bindInterface(resourceName..":unitycfx:tunnel",lib)
 
 if CLIENT then
     local object
-    LocalPlayer["state"]["unitycfx:blockPlayer"] = false
     
     function Functions.blockPlayer(status)
         if status then StartBlock() end
